@@ -287,7 +287,7 @@ const sampleInvites = [
         category: 'Art',
         totalSeats: 500,
         ticketPrice: 0,
-        imageUrl: 'https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?auto=format&fit=crop&q=80&w=800'
+        imageUrl: 'https://images.unsplash.com/photo-1561059488-916d69792237?auto=format&fit=crop&q=80&w=800'
     },
     {
         title: 'Monochrome Photography Exposition',
