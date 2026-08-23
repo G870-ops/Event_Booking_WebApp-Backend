@@ -72,6 +72,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/bookings', bookingRoutes);
 
+
+app.get('/', (req, res) => {
+    res.json({ message: "Event Booking API is running successfully" });
+});
+
 // Connect to MongoDB
 mongoose
     .connect(process.env.MONGODB_URI)
