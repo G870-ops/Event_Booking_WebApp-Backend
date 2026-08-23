@@ -100,6 +100,7 @@ app.use(async (req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/admin', require('./routes/admin'));
 
 app.get('/', (req, res) => {
     res.json({ message: "Event Booking API is running successfully" });

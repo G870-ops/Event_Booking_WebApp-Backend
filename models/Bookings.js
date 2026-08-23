@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+/*const mongoose = require('mongoose');
 
 const bookingSchema = new mongoose.Schema({
     userId: {
@@ -26,6 +26,21 @@ const bookingSchema = new mongoose.Schema({
             type: Number,
             required: true
         }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Booking', bookingSchema); */
+
+
+const mongoose = require('mongoose');
+
+const bookingSchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    inviteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invite', required: true },
+    status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'confirmed' },
+    paymentStatus: { type: String, enum: ['paid', 'unpaid', 'refunded'], default: 'paid' },
+    amount: { type: Number, default: 0 },
+    // ADD THIS FIELD FOR GATE PASSED / SCANNER VERIFICATION
+    checkedIn: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);
