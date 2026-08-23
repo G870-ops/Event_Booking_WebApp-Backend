@@ -35,7 +35,8 @@ const mongoose = require('mongoose');
 
 const bookingSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    inviteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invite', required: true },
+    eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invite' }, // Added back for backward compatibility with old data
+    inviteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invite' },
     status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'confirmed' },
     paymentStatus: { type: String, enum: ['paid', 'unpaid', 'refunded'], default: 'paid' },
     amount: { type: Number, default: 0 },

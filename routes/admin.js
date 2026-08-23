@@ -1,20 +1,43 @@
 const express = require('express');
 const router = express.Router();
-const { protect, admin } = require('../middleware/auth'); // Destructured middleware functions
+const { protect, admin } = require('../middleware/auth');
 const Booking = require('../models/Bookings');
 const AuditLog = require('../models/AuditLog');
+
+// Telemetry & Stats HUD Endpoint
+router.get('/telemetry', protect, admin, async (req, res) => {
+    try {
+        const confirmedBookings = await Booking.find({ status: 'confirmed' });
+        const grossYield = confirmedBookings.reduce((sum, b) => sum + (b.amount || 0), 0);
+        const pendingGate = await Booking.countDocuments({ status: 'confirmed', checkedIn: false });
+
+        res.json({
+            grossYield,
+            authenticatedClients: confirmedBookings.length,
+            pendingGateRequests: pendingGate,
+            revenueTrajectory: [],
+            categoryBreakdown: []
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Telemetry Sync Error', details: error.message });
+    }
+});
 
 // Gate Scanner Check-In Verification
 router.post('/bookings/verify-qr', protect, async (req, res) => {
     try {
         const { ticketId } = req.body;
-        const booking = await Booking.findById(ticketId).populate('userId inviteId');
+        const booking = await Booking.findById(ticketId).populate('userId inviteId eventId');
         if (!booking) return res.status(404).json({ message: 'Invalid Ticket ID' });
         if (booking.checkedIn) return res.status(400).json({ message: 'Ticket Already Redeemed' });
 
         booking.checkedIn = true;
         await booking.save();
-        res.json({ message: 'Gate Pass Authorized!', booking });
+
+        const bookingObj = booking.toObject();
+        bookingObj.inviteId = bookingObj.inviteId || bookingObj.eventId;
+
+        res.json({ message: 'Gate Pass Authorized!', booking: bookingObj });
     } catch (error) {
         res.status(500).json({ message: 'Verification Server Error' });
     }
