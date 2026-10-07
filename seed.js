@@ -5,6 +5,9 @@ const User = require('./models/User');
 const Invite = require('./models/Invite');
 const Booking = require('./models/Bookings');
 
+const path = require('path');
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config();
 
 const users = [

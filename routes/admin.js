@@ -1,27 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { protect, admin } = require('../middleware/auth');
+const { protect, admin } = require('../middleware/auth'); // Destructured middleware functions
 const Booking = require('../models/Bookings');
 const AuditLog = require('../models/AuditLog');
-
-// Telemetry & Stats HUD Endpoint
-router.get('/telemetry', protect, admin, async (req, res) => {
-    try {
-        const confirmedBookings = await Booking.find({ status: 'confirmed' });
-        const grossYield = confirmedBookings.reduce((sum, b) => sum + (b.amount || 0), 0);
-        const pendingGate = await Booking.countDocuments({ status: 'confirmed', checkedIn: false });
-
-        res.json({
-            grossYield,
-            authenticatedClients: confirmedBookings.length,
-            pendingGateRequests: pendingGate,
-            revenueTrajectory: [],
-            categoryBreakdown: []
-        });
-    } catch (error) {
-        res.status(500).json({ message: 'Telemetry Sync Error', details: error.message });
-    }
-});
 
 // Gate Scanner Check-In Verification
 router.post('/bookings/verify-qr', protect, async (req, res) => {
@@ -33,7 +14,7 @@ router.post('/bookings/verify-qr', protect, async (req, res) => {
 
         booking.checkedIn = true;
         await booking.save();
-
+        
         const bookingObj = booking.toObject();
         bookingObj.inviteId = bookingObj.inviteId || bookingObj.eventId;
 
