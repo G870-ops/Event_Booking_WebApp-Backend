@@ -39,24 +39,6 @@ router.post('/broadcast', protect, admin, async (req, res) => {
     }
 });
 
-// Update Booking Payment & Confirmation Status (Admin)
-router.put('/bookings/:id/payment-status', protect, admin, async (req, res) => {
-    try {
-        const { paymentStatus, status } = req.body;
-        const booking = await Booking.findById(req.params.id).populate('userId inviteId eventId');
-        if (!booking) return res.status(404).json({ message: 'Booking not found' });
-
-        if (paymentStatus) booking.paymentStatus = paymentStatus;
-        if (status) booking.status = status;
-        if (paymentStatus === 'paid') booking.paidAt = new Date();
-
-        await booking.save();
-        res.json({ message: 'Booking payment status updated successfully', booking });
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating payment status', error: error.message });
-    }
-});
-
 // Fetch Audit Logs
 router.get('/audit-logs', protect, admin, async (req, res) => {
     try {
@@ -67,4 +49,4 @@ router.get('/audit-logs', protect, admin, async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = router;
