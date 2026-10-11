@@ -49,4 +49,9 @@ router.get('/audit-logs', protect, admin, async (req, res) => {
     }
 });
 
+// Payment Gateway & UPI Settings Management
+const { getPaymentSettings, updatePaymentSettings } = require('../controllers/bookingController');
+router.get('/payment-settings', protect, admin, getPaymentSettings);
+router.put('/payment-settings', protect, admin, updatePaymentSettings);
+
 module.exports = router;

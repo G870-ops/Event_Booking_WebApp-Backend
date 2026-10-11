@@ -8,11 +8,17 @@ const {
     getMyBookings,
     confirmBooking,
     cancelBooking,
-    checkInGatePass
+    checkInGatePass,
+    processBookingPayment,
+    getPaymentSettings,
+    updatePaymentSettings
 } = require('../controllers/bookingController');
 
+router.get('/payment-settings', getPaymentSettings);
+router.put('/payment-settings', protect, admin, updatePaymentSettings);
 router.post('/', protect, bookInvite);
 router.post('/send-otp', protect, sendBookingOTP);
+router.post('/:id/pay', protect, processBookingPayment);
 router.get('/my', protect, getMyBookings);
 router.put('/verify-gatepass', protect, checkInGatePass);
 router.put('/:id/confirm', protect, admin, confirmBooking);

@@ -37,6 +37,19 @@ const inviteSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    backgroundType: {
+        type: String,
+        enum: ['default', 'image', 'video'],
+        default: 'default'
+    },
+    backgroundImage: {
+        type: String,
+        default: ''
+    },
+    backgroundVideo: {
+        type: String,
+        default: ''
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

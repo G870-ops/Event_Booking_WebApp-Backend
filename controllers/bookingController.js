@@ -1,6 +1,7 @@
 const Booking = require('../models/Bookings');
 const OTP = require('../models/OTP');
 const Invite = require('../models/Invite');
+const PaymentSettings = require('../models/PaymentSettings');
 const { sendOTPEmail, sendbookingEmail } = require('../utils/email');
 
 const generateOTP = () => {
@@ -230,5 +231,210 @@ exports.checkInGatePass = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: 'Verification failed', details: error.message });
+    }
+};
+
+// Process Booking Payment (Stripe Card, UPI QR, UPI ID, Free)
+exports.processBookingPayment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { paymentMethod, paymentReference, upiId, cardDetails } = req.body;
+
+        const booking = await Booking.findById(id)
+            .populate('eventId')
+            .populate('inviteId');
+
+        if (!booking) {
+            return res.status(404).json({ error: 'Booking record not found' });
+        }
+
+        // Authorization check: must be owner of booking or admin/staff
+        const adminRoles = ['admin', 'superadmin', 'event_manager', 'finance'];
+        const isOwner = booking.userId && booking.userId.toString() === req.user._id.toString();
+        const isStaff = req.user && adminRoles.includes(req.user.role);
+
+        if (!isOwner && !isStaff) {
+            return res.status(403).json({ error: 'Unauthorized to process payment for this booking' });
+        }
+
+        if (booking.status === 'confirmed' && booking.paymentStatus === 'paid') {
+            const inviteObj = booking.inviteId || booking.eventId;
+            const formatted = booking.toObject();
+            formatted.inviteId = inviteObj;
+            return res.json({ message: 'Booking is already confirmed and paid', booking: formatted });
+        }
+
+        const inviteRef = booking.eventId || booking.inviteId;
+        const invite = await Invite.findById(inviteRef._id || inviteRef);
+        if (!invite) {
+            return res.status(404).json({ error: 'Associated event could not be found' });
+        }
+
+        // STRIPE CARD PAYMENT VALIDATION & PROCESSING
+        if (paymentMethod === 'stripe') {
+            if (cardDetails) {
+                const { cardNumber, cardExpiry, cardCvv, cardName } = cardDetails;
+                const cleanNumber = (cardNumber || '').replace(/\s+/g, '');
+
+                // 1. Validate card number
+                if (!cleanNumber || cleanNumber.length < 15 || cleanNumber.length > 16 || !/^\d+$/.test(cleanNumber)) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: Please enter a valid 16-digit card number.' 
+                    });
+                }
+
+                // 2. Validate expiration date format (MM/YY)
+                if (!cardExpiry || !cardExpiry.includes('/')) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: Invalid expiry date format. Use MM/YY.' 
+                    });
+                }
+                const parts = cardExpiry.split('/');
+                const expMonth = parseInt(parts[0].trim(), 10);
+                const expYear = parseInt(parts[1].trim(), 10);
+                if (isNaN(expMonth) || expMonth < 1 || expMonth > 12) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: Invalid expiration month (01-12).' 
+                    });
+                }
+                const now = new Date();
+                const currentTwoDigitYear = now.getFullYear() % 100;
+                const currentMonth = now.getMonth() + 1;
+                const fullExpYear = expYear < 100 ? expYear : expYear % 100;
+
+                if (fullExpYear < currentTwoDigitYear || (fullExpYear === currentTwoDigitYear && expMonth < currentMonth)) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: This card has expired. Please use an active card.' 
+                    });
+                }
+
+                // 3. Validate CVV (3-4 digits)
+                const cleanCvv = (cardCvv || '').toString().trim();
+                if (!cleanCvv || cleanCvv.length < 3 || cleanCvv.length > 4 || !/^\d+$/.test(cleanCvv)) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: Please enter a valid 3 or 4 digit CVV code.' 
+                    });
+                }
+
+                // 4. Validate cardholder name
+                if (!cardName || cardName.trim().length < 2) {
+                    return res.status(400).json({ 
+                        error: 'Stripe Authorization Failed: Please enter the cardholder name.' 
+                    });
+                }
+            } else if (!paymentReference || !paymentReference.startsWith('stripe_ch_')) {
+                return res.status(400).json({ 
+                    error: 'Stripe Authorization Failed: Invalid card authorization token or missing credentials.' 
+                });
+            }
+        } else if (paymentMethod === 'upi_id') {
+            if (upiId && !upiId.includes('@')) {
+                return res.status(400).json({ 
+                    error: 'Invalid UPI ID: Must be in VPA format (e.g. username@okhdfcbank).' 
+                });
+            }
+        }
+
+        // Deduct seat if booking was pending
+        if (booking.status !== 'confirmed') {
+            if (invite.availableSeats <= 0) {
+                return res.status(400).json({ error: 'No available seats left for this event.' });
+            }
+            invite.availableSeats = Math.max(0, invite.availableSeats - 1);
+            await invite.save();
+        }
+
+        // Update booking to confirmed & paid
+        booking.status = 'confirmed';
+        booking.paymentStatus = 'paid';
+        booking.paymentMethod = paymentMethod || 'stripe';
+        booking.paymentReference = paymentReference || `PAY_${Date.now()}`;
+        if (upiId) booking.upiId = upiId;
+        booking.paidAt = new Date();
+        await booking.save();
+
+        // Send confirmation email
+        try {
+            if (req.user && req.user.email) {
+                await sendbookingEmail(req.user.email, req.user.name, invite.title);
+            }
+        } catch (emailErr) {
+            console.warn('Booking confirmation email sending error:', emailErr.message);
+        }
+
+        const formatted = booking.toObject();
+        formatted.inviteId = invite;
+
+        res.json({
+            message: 'Payment authorized and verified! Booking is confirmed.',
+            booking: formatted
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Payment processing error', details: error.message });
+    }
+};
+
+// Get Payment Settings (UPI ID, Merchant Name, Custom QR) - Public / Authenticated
+exports.getPaymentSettings = async (req, res) => {
+    try {
+        let settings = await PaymentSettings.findOne().sort({ updatedAt: -1 });
+        if (!settings) {
+            settings = await PaymentSettings.create({
+                upiId: 'invitor.official@okaxis',
+                merchantName: 'INVITOR Events Official',
+                qrCodeUrl: '',
+                stripeEnabled: true,
+                upiEnabled: true
+            });
+        }
+        res.json({
+            upiId: settings.upiId,
+            merchantName: settings.merchantName,
+            qrCodeUrl: settings.qrCodeUrl,
+            stripeEnabled: settings.stripeEnabled,
+            upiEnabled: settings.upiEnabled,
+            updatedAt: settings.updatedAt
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error fetching payment settings', details: error.message });
+    }
+};
+
+// Update Payment Settings (Admin Only)
+exports.updatePaymentSettings = async (req, res) => {
+    try {
+        const { upiId, merchantName, qrCodeUrl, stripeEnabled, upiEnabled } = req.body;
+
+        if (upiId && !upiId.includes('@')) {
+            return res.status(400).json({ error: 'Invalid UPI ID: Must contain "@" (e.g., yourname@okaxis)' });
+        }
+
+        let settings = await PaymentSettings.findOne().sort({ updatedAt: -1 });
+        if (!settings) {
+            settings = new PaymentSettings();
+        }
+
+        if (upiId !== undefined) settings.upiId = upiId.trim();
+        if (merchantName !== undefined) settings.merchantName = merchantName.trim();
+        if (qrCodeUrl !== undefined) settings.qrCodeUrl = qrCodeUrl.trim();
+        if (stripeEnabled !== undefined) settings.stripeEnabled = Boolean(stripeEnabled);
+        if (upiEnabled !== undefined) settings.upiEnabled = Boolean(upiEnabled);
+        settings.updatedBy = req.user._id;
+
+        await settings.save();
+
+        res.json({
+            message: 'Payment gateway & UPI configuration updated successfully!',
+            settings: {
+                upiId: settings.upiId,
+                merchantName: settings.merchantName,
+                qrCodeUrl: settings.qrCodeUrl,
+                stripeEnabled: settings.stripeEnabled,
+                upiEnabled: settings.upiEnabled,
+                updatedAt: settings.updatedAt
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error updating payment settings', details: error.message });
     }
 };

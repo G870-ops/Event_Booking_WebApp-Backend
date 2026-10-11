@@ -34,7 +34,20 @@ exports.getInviteById = async (req, res) => {
 };
 
 exports.createInvite = async (req, res) => {
-    const { title, description, date, location, category, totalSeats, ticketPrice, imageUrl, image } = req.body;
+    const { 
+        title, 
+        description, 
+        date, 
+        location, 
+        category, 
+        totalSeats, 
+        ticketPrice, 
+        imageUrl, 
+        image,
+        backgroundType,
+        backgroundImage,
+        backgroundVideo
+    } = req.body;
     try {
         const invite = await Invite.create({
             title,
@@ -46,6 +59,9 @@ exports.createInvite = async (req, res) => {
             availableSeats: totalSeats,
             ticketPrice,
             imageUrl: image || imageUrl || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
+            backgroundType: backgroundType || (backgroundVideo ? 'video' : backgroundImage ? 'image' : 'default'),
+            backgroundImage: backgroundImage || '',
+            backgroundVideo: backgroundVideo || '',
             createdBy: req.user._id
         });
         res.status(201).json(invite);
@@ -55,9 +71,22 @@ exports.createInvite = async (req, res) => {
 };
 
 exports.updateInvite = async (req, res) => {
-    const { title, description, date, location, category, totalSeats, ticketPrice, imageUrl, image } = req.body;
+    const { 
+        title, 
+        description, 
+        date, 
+        location, 
+        category, 
+        totalSeats, 
+        ticketPrice, 
+        imageUrl, 
+        image,
+        backgroundType,
+        backgroundImage,
+        backgroundVideo
+    } = req.body;
     try {
-        const invite = await Invite.findByIdAndUpdate(req.params.id, {
+        const updateData = {
             title,
             description,
             date,
@@ -66,7 +95,12 @@ exports.updateInvite = async (req, res) => {
             totalSeats,
             ticketPrice,
             imageUrl: image || imageUrl
-        }, { new: true });
+        };
+        if (backgroundType !== undefined) updateData.backgroundType = backgroundType;
+        if (backgroundImage !== undefined) updateData.backgroundImage = backgroundImage;
+        if (backgroundVideo !== undefined) updateData.backgroundVideo = backgroundVideo;
+
+        const invite = await Invite.findByIdAndUpdate(req.params.id, updateData, { new: true });
         if (!invite) {
             return res.status(404).json({ message: 'Invite not found' });
         }
